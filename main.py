@@ -6,6 +6,7 @@ from openai import OpenAI
 import os
 import ast
 import tiktoken
+
 load_dotenv()
 
 OPEN_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -24,13 +25,14 @@ client = OpenAI(api_key=OPEN_API_KEY)
 embedding_path = "data/winter_olympics_2022.csv"
 df = pd.read_csv(embedding_path)
 # Convert the string representation of embeddings to actual lists
-df['embedding'] = df['embedding'].apply(ast.literal_eval)
+df["embedding"] = df["embedding"].apply(ast.literal_eval)
+
 
 def strings_ranked_by_relatedness(
     query: str,
     df: pd.DataFrame,
     relatedness_fn=lambda x, y: 1 - spatial.distance.cosine(x, y),
-    top_n: int = 100
+    top_n: int = 100,
 ) -> tuple[list[str], list[float]]:
     """Returns a list of strings and relatednesses, sorted from most related to least."""
     query_embedding_response = client.embeddings.create(
@@ -46,16 +48,13 @@ def strings_ranked_by_relatedness(
     strings, relatednesses = zip(*strings_and_relatednesses)
     return strings[:top_n], relatednesses[:top_n]
 
+
 def num_tokens(text: str, model: str = GPT_MODELS[0]) -> int:
     encoding = tiktoken.encoding_for_model(model)
     return len(encoding.encode(text))
 
-def query_message(
-    query: str,
-    df: pd.DataFrame,
-    model: str,
-    token_budget: int
-) -> str:
+
+def query_message(query: str, df: pd.DataFrame, model: str, token_budget: int) -> str:
     """Return a message for GPT, with relevant source texts pulled from a dataframe."""
     strings, relatednesses = strings_ranked_by_relatedness(query, df)
     introduction = 'Use the below articles on the 2022 Winter Olympics to answer the subsequent question. If the answer cannot be found in the articles, write "I could not find an answer."'
@@ -63,10 +62,7 @@ def query_message(
     message = introduction
     for string in strings:
         next_article = f'\n\nWikipedia article section:\n"""\n{string}\n"""'
-        if (
-            num_tokens(message + next_article + question, model=model)
-            > token_budget
-        ):
+        if num_tokens(message + next_article + question, model=model) > token_budget:
             break
         else:
             message += next_article
@@ -85,23 +81,25 @@ def ask(
     if print_message:
         print(message)
     messages = [
-        {"role": "system", "content": "You answer questions about the 2022 Winter Olympics."},
+        {
+            "role": "system",
+            "content": "You answer questions about the 2022 Winter Olympics.",
+        },
         {"role": "user", "content": message},
     ]
     response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=0
+        model=model, messages=messages, temperature=0
     )
     response_message = response.choices[0].message.content
     return response_message
 
+
 def main():
-
-
     logger.info(f"df: {df}")
 
-    answer = ask('Did any controversies occur at 2022 Winter Olympics?', print_message=True)
+    answer = ask(
+        "Did any controversies occur at 2022 Winter Olympics?", print_message=True
+    )
     logger.info(f"answer: {answer}")
     # examples
     # strings, relatednesses = strings_ranked_by_relatedness("curling gold medal", df, top_n=5)
